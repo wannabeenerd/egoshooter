@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Browser CS - FPS</title>
+    <title>Browser CS - 3D FPS</title>
     <style>
         * {
             margin: 0;
@@ -16,12 +16,12 @@
             color: #fff;
             font-family: 'Courier New', monospace;
             overflow: hidden;
-            cursor: none;
         }
         
         #gameCanvas {
             display: block;
             background: #000;
+            cursor: none;
         }
         
         #hud {
@@ -73,45 +73,13 @@
             text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
         }
         
-        #ammoBar {
+        #ammoDisplay {
             position: absolute;
-            bottom: 80px;
+            bottom: 20px;
             right: 20px;
-            width: 200px;
-            height: 40px;
-        }
-        
-        .bar {
-            background: rgba(255,255,255,0.2);
-            border: 2px solid #fff;
-            height: 100%;
-            position: relative;
-        }
-        
-        .bar-fill {
-            background: linear-gradient(90deg, #ff0000, #ffff00, #00ff00);
-            height: 100%;
-            transition: width 0.2s;
-        }
-        
-        .bar-text {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
+            font-size: 24px;
             font-weight: bold;
-            text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
-        }
-        
-        #weapon {
-            position: absolute;
-            bottom: 0;
-            right: 0;
-            width: 300px;
-            height: 200px;
-            background: linear-gradient(45deg, #333, #666);
-            border-left: 3px solid #888;
-            border-top: 3px solid #888;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
         }
         
         #minimap {
@@ -132,30 +100,15 @@
             opacity: 0.8;
         }
         
-        .damage-indicator {
+        #weapon {
             position: absolute;
-            width: 100%;
-            height: 100%;
-            background: radial-gradient(circle, transparent 40%, rgba(255,0,0,0.3) 100%);
-            opacity: 0;
-            transition: opacity 0.3s;
-            pointer-events: none;
-        }
-        
-        @keyframes muzzleFlash {
-            0% { opacity: 1; transform: scale(1); }
-            100% { opacity: 0; transform: scale(2); }
-        }
-        
-        .muzzle-flash {
-            position: absolute;
-            bottom: 100px;
-            right: 50px;
-            width: 50px;
-            height: 50px;
-            background: radial-gradient(circle, #ffff00, transparent);
-            border-radius: 50%;
-            animation: muzzleFlash 0.1s ease-out;
+            bottom: -50px;
+            right: 100px;
+            width: 200px;
+            height: 150px;
+            background: linear-gradient(45deg, #444, #666, #333);
+            border: 2px solid #888;
+            clip-path: polygon(0% 40%, 20% 30%, 80% 35%, 100% 50%, 90% 100%, 10% 100%);
         }
     </style>
 </head>
@@ -164,22 +117,18 @@
     <div id="hud">
         <div id="crosshair"></div>
         <div id="instructions">
-            WASD: Bewegung | Maus: Umschauen | Klick: Schießen | R: Nachladen | Shift: Laufen
+            WASD: Bewegung | Maus: Umschauen | Klick: Schießen | R: Nachladen
         </div>
         <div id="ui">
             <div>Gesundheit: <span id="health">100</span></div>
             <div>Kills: <span id="kills">0</span></div>
             <div>Waffe: AK-47</div>
         </div>
-        <div id="ammoBar">
-            <div class="bar">
-                <div class="bar-fill" id="ammoFill" style="width: 100%;"></div>
-                <div class="bar-text" id="ammoText">30/90</div>
-            </div>
+        <div id="ammoDisplay">
+            <span id="ammo">30</span>/<span id="totalAmmo">90</span>
         </div>
         <canvas id="minimap"></canvas>
         <div id="weapon"></div>
-        <div class="damage-indicator" id="damageIndicator"></div>
     </div>
 
     <script>
@@ -192,66 +141,75 @@
                 
                 this.resizeCanvas();
                 
-                // Game state
+                // Player state
                 this.player = {
-                    x: 5,
-                    y: 5,
+                    x: 2,
+                    y: 2,
                     angle: 0,
                     health: 100,
                     maxHealth: 100,
-                    speed: 0.1,
-                    rotSpeed: 0.003,
-                    weapon: {
-                        ammo: 30,
-                        maxAmmo: 30,
-                        totalAmmo: 90,
-                        damage: 25,
-                        recoil: 0,
-                        fireRate: 100,
-                        lastShot: 0
-                    }
+                    speed: 0.05,
+                    rotSpeed: 0.002
                 };
                 
-                // Map (1 = wall, 0 = empty)
+                // Weapon state
+                this.weapon = {
+                    ammo: 30,
+                    maxAmmo: 30,
+                    totalAmmo: 90,
+                    recoil: 0,
+                    lastShot: 0,
+                    fireRate: 150
+                };
+                
+                // 16x16 Map (1 = wall, 0 = empty)
                 this.map = [
                     [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
-                    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
-                    [1,0,1,1,0,0,0,1,1,1,1,0,0,1,0,1],
-                    [1,0,1,0,0,0,0,0,0,0,1,0,0,1,0,1],
-                    [1,0,1,0,0,1,1,1,0,0,1,0,0,0,0,1],
-                    [1,0,0,0,0,1,0,1,0,0,0,0,1,1,0,1],
-                    [1,0,0,0,0,1,0,1,0,0,0,0,0,1,0,1],
-                    [1,0,1,1,0,1,0,1,1,1,0,0,0,0,0,1],
-                    [1,0,0,0,0,0,0,0,0,0,0,1,1,1,0,1],
-                    [1,0,0,1,0,0,0,0,0,0,0,0,0,0,0,1],
-                    [1,0,0,1,0,0,0,1,1,0,0,0,0,1,0,1],
-                    [1,0,0,1,1,1,0,1,0,0,0,1,0,1,0,1],
-                    [1,0,0,0,0,0,0,1,0,0,0,1,0,0,0,1],
-                    [1,0,1,1,1,1,0,0,0,1,0,1,1,1,0,1],
+                    [1,0,0,0,0,0,0,0,1,0,0,0,0,0,0,1],
+                    [1,0,1,1,0,0,0,0,1,0,0,0,1,1,0,1],
+                    [1,0,1,0,0,0,0,0,0,0,0,0,0,1,0,1],
+                    [1,0,1,0,0,1,1,1,0,0,1,1,1,0,0,1],
+                    [1,0,0,0,0,1,0,0,0,0,0,0,1,0,0,1],
+                    [1,0,0,0,0,1,0,0,0,0,0,0,1,0,0,1],
+                    [1,0,1,1,0,1,0,0,0,0,0,0,1,0,1,1],
+                    [1,0,0,0,0,0,0,0,1,1,0,0,0,0,0,1],
+                    [1,1,0,0,0,0,0,0,1,1,0,0,0,0,1,1],
+                    [1,0,0,1,0,0,0,0,0,0,0,0,1,0,0,1],
+                    [1,0,0,1,1,1,0,0,0,0,1,1,1,0,0,1],
+                    [1,0,0,0,0,0,0,0,1,0,0,0,0,0,0,1],
+                    [1,0,1,1,1,1,0,0,1,0,0,1,1,1,0,1],
                     [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
                     [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
                 ];
                 
+                // Enemies
                 this.enemies = [
-                    {x: 8, y: 8, health: 100, angle: 0, lastSeen: 0, state: 'patrol'},
-                    {x: 12, y: 3, health: 100, angle: 1.5, lastSeen: 0, state: 'patrol'},
-                    {x: 3, y: 12, health: 100, angle: 3, lastSeen: 0, state: 'patrol'},
-                    {x: 13, y: 13, health: 100, angle: 4.5, lastSeen: 0, state: 'patrol'}
+                    {x: 8, y: 3, health: 100, maxHealth: 100, angle: 0, state: 'patrol', target: null, lastSeen: 0, size: 0.3},
+                    {x: 12, y: 6, health: 100, maxHealth: 100, angle: 1.5, state: 'patrol', target: null, lastSeen: 0, size: 0.3},
+                    {x: 6, y: 12, health: 100, maxHealth: 100, angle: 3, state: 'patrol', target: null, lastSeen: 0, size: 0.3},
+                    {x: 13, y: 13, health: 100, maxHealth: 100, angle: 4.5, state: 'patrol', target: null, lastSeen: 0, size: 0.3}
                 ];
                 
                 this.keys = {};
-                this.mouseX = 0;
-                this.mouseY = 0;
                 this.kills = 0;
-                this.rays = [];
+                this.lastTime = 0;
                 
                 this.initEventListeners();
+                this.requestPointerLock();
                 this.gameLoop();
             }
             
             resizeCanvas() {
                 this.canvas.width = window.innerWidth;
                 this.canvas.height = window.innerHeight;
+                this.minimap.width = 150;
+                this.minimap.height = 150;
+            }
+            
+            requestPointerLock() {
+                this.canvas.addEventListener('click', () => {
+                    this.canvas.requestPointerLock();
+                });
             }
             
             initEventListeners() {
@@ -269,39 +227,29 @@
                 });
                 
                 document.addEventListener('mousemove', (e) => {
-                    if (document.pointerLockElement) {
+                    if (document.pointerLockElement === this.canvas) {
                         this.player.angle += e.movementX * this.player.rotSpeed;
-                        // Begrenzte vertikale Bewegung für Recoil-Effekt
-                        this.player.recoil = Math.max(0, this.player.recoil - e.movementY * 0.01);
                     }
                 });
                 
                 document.addEventListener('click', (e) => {
-                    if (!document.pointerLockElement) {
-                        this.canvas.requestPointerLock();
-                    } else {
+                    if (document.pointerLockElement === this.canvas) {
                         this.shoot();
-                    }
-                });
-                
-                document.addEventListener('pointerlockchange', () => {
-                    if (document.pointerLockElement) {
-                        document.body.style.cursor = 'none';
                     }
                 });
             }
             
+            // Raycasting function
             castRay(angle) {
-                const stepSize = 0.02;
+                const stepSize = 0.01;
                 let x = this.player.x;
                 let y = this.player.y;
+                let distance = 0;
                 
                 const dx = Math.cos(angle) * stepSize;
                 const dy = Math.sin(angle) * stepSize;
                 
-                let distance = 0;
-                
-                while (distance < 20) {
+                while (distance < 16) {
                     x += dx;
                     y += dy;
                     distance += stepSize;
@@ -309,89 +257,308 @@
                     const mapX = Math.floor(x);
                     const mapY = Math.floor(y);
                     
-                    if (mapX < 0 || mapX >= this.map[0].length || 
-                        mapY < 0 || mapY >= this.map.length || 
-                        this.map[mapY][mapX] === 1) {
-                        break;
+                    if (mapX < 0 || mapX >= 16 || mapY < 0 || mapY >= 16 || this.map[mapY][mapX] === 1) {
+                        return {
+                            distance: distance,
+                            hitX: x,
+                            hitY: y,
+                            wall: true
+                        };
                     }
                 }
                 
-                return {distance, x, y};
+                return {distance: 16, hitX: x, hitY: y, wall: false};
             }
             
+            // Main 3D rendering
             render3D() {
-                const fov = Math.PI / 3;
-                const numRays = this.canvas.width;
-                const rayAngleStep = fov / numRays;
+                // Clear canvas with gradient sky
+                const gradient = this.ctx.createLinearGradient(0, 0, 0, this.canvas.height);
+                gradient.addColorStop(0, '#001122');
+                gradient.addColorStop(0.5, '#003366');
+                gradient.addColorStop(1, '#2a4a2a');
+                this.ctx.fillStyle = gradient;
+                this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
                 
-                this.rays = [];
+                const fov = Math.PI / 3; // 60 degrees
+                const numRays = this.canvas.width / 2; // Optimization: every 2 pixels
                 
-                // Clear screen
-                this.ctx.fillStyle = '#87CEEB'; // Sky
-                this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height / 2);
-                this.ctx.fillStyle = '#654321'; // Ground
-                this.ctx.fillRect(0, this.canvas.height / 2, this.canvas.width, this.canvas.height / 2);
-                
-                // Cast rays and draw walls
-                for (let i = 0; i < numRays; i += 2) {
-                    const rayAngle = this.player.angle - fov / 2 + i * rayAngleStep;
+                // Cast rays for 3D view
+                for (let i = 0; i < numRays; i++) {
+                    const rayAngle = this.player.angle - fov / 2 + (i / numRays) * fov;
                     const ray = this.castRay(rayAngle);
-                    this.rays.push(ray);
                     
-                    // Perspectiv correction
-                    const correctedDistance = ray.distance * Math.cos(rayAngle - this.player.angle);
-                    
-                    if (correctedDistance > 0) {
-                        const wallHeight = (this.canvas.height / 2) / correctedDistance;
-                        const wallTop = (this.canvas.height / 2) - wallHeight + this.player.weapon.recoil * 50;
-                        const wallBottom = wallTop + wallHeight * 2;
+                    if (ray.wall) {
+                        // Calculate perspective-corrected distance
+                        const correctedDistance = ray.distance * Math.cos(rayAngle - this.player.angle);
+                        
+                        // Calculate wall height on screen
+                        const wallHeight = this.canvas.height / correctedDistance;
+                        const wallTop = (this.canvas.height - wallHeight) / 2 + this.weapon.recoil * 20;
                         
                         // Wall shading based on distance
-                        const brightness = Math.max(0.2, 1 - correctedDistance / 10);
-                        const color = Math.floor(brightness * 255);
+                        const brightness = Math.max(0.1, 1 - correctedDistance / 8);
                         
-                        // Different wall colors based on position
-                        const wallType = Math.floor(ray.x + ray.y) % 3;
+                        // Different wall textures based on hit position
+                        const wallType = (Math.floor(ray.hitX * 4) + Math.floor(ray.hitY * 4)) % 3;
+                        let r, g, b;
+                        
                         if (wallType === 0) {
-                            this.ctx.fillStyle = `rgb(${color}, ${Math.floor(color * 0.8)}, ${Math.floor(color * 0.6)})`;
+                            r = Math.floor(150 * brightness);
+                            g = Math.floor(100 * brightness);
+                            b = Math.floor(50 * brightness);
                         } else if (wallType === 1) {
-                            this.ctx.fillStyle = `rgb(${Math.floor(color * 0.8)}, ${color}, ${Math.floor(color * 0.6)})`;
+                            r = Math.floor(100 * brightness);
+                            g = Math.floor(150 * brightness);
+                            b = Math.floor(100 * brightness);
                         } else {
-                            this.ctx.fillStyle = `rgb(${Math.floor(color * 0.6)}, ${Math.floor(color * 0.8)}, ${color})`;
+                            r = Math.floor(80 * brightness);
+                            g = Math.floor(80 * brightness);
+                            b = Math.floor(150 * brightness);
                         }
                         
-                        this.ctx.fillRect(i, wallTop, 2, wallBottom - wallTop);
+                        this.ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
+                        this.ctx.fillRect(i * 2, wallTop, 2, wallHeight);
                     }
                 }
                 
-                // Draw enemies
+                // Render enemies
                 this.renderEnemies();
             }
             
             renderEnemies() {
-                for (const enemy of this.enemies) {
+                const fov = Math.PI / 3;
+                
+                for (let i = 0; i < this.enemies.length; i++) {
+                    const enemy = this.enemies[i];
                     if (enemy.health <= 0) continue;
                     
                     const dx = enemy.x - this.player.x;
                     const dy = enemy.y - this.player.y;
                     const distance = Math.sqrt(dx * dx + dy * dy);
                     
-                    if (distance > 15) continue; // Too far to render
+                    if (distance > 10) continue; // Too far to render
                     
+                    // Check if enemy is in FOV
                     const angleToEnemy = Math.atan2(dy, dx);
                     let angleDiff = angleToEnemy - this.player.angle;
                     
-                    // Normalize angle
+                    // Normalize angle difference
                     while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
                     while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
                     
-                    if (Math.abs(angleDiff) < Math.PI / 3) { // In FOV
-                        const screenX = (angleDiff + Math.PI / 3) / (2 * Math.PI / 3) * this.canvas.width;
-                        const enemyHeight = (this.canvas.height / 4) / distance;
+                    if (Math.abs(angleDiff) < fov / 2) {
+                        // Check if enemy is behind a wall
+                        const rayToEnemy = this.castRay(angleToEnemy);
+                        if (rayToEnemy.distance < distance - 0.1) continue; // Behind wall
+                        
+                        // Calculate screen position
+                        const screenX = (angleDiff + fov / 2) / fov * this.canvas.width;
+                        const enemyHeight = this.canvas.height / distance * enemy.size * 3;
                         const enemyWidth = enemyHeight;
                         
                         const screenY = this.canvas.height / 2 - enemyHeight / 2;
                         
                         // Enemy color based on health
-                        const healthPercent = enemy.health / 100;
-                        this.ctx.fillStyle = `rgb
+                        const healthPercent = enemy.health / enemy.maxHealth;
+                        const r = Math.floor(255 * (1 - healthPercent) + 100 * healthPercent);
+                        const g = Math.floor(100 * healthPercent);
+                        const b = Math.floor(100 * healthPercent);
+                        
+                        // Draw enemy as a simple rectangle (sprite simulation)
+                        this.ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
+                        this.ctx.fillRect(screenX - enemyWidth / 2, screenY, enemyWidth, enemyHeight);
+                        
+                        // Enemy "face"
+                        this.ctx.fillStyle = '#fff';
+                        this.ctx.fillRect(screenX - enemyWidth / 4, screenY + enemyHeight / 4, enemyWidth / 8, enemyHeight / 8);
+                        this.ctx.fillRect(screenX + enemyWidth / 8, screenY + enemyHeight / 4, enemyWidth / 8, enemyHeight / 8);
+                    }
+                }
+            }
+            
+            renderMinimap() {
+                const scale = 9;
+                this.minimapCtx.fillStyle = '#000';
+                this.minimapCtx.fillRect(0, 0, 150, 150);
+                
+                // Draw map
+                for (let y = 0; y < 16; y++) {
+                    for (let x = 0; x < 16; x++) {
+                        if (this.map[y][x] === 1) {
+                            this.minimapCtx.fillStyle = '#666';
+                            this.minimapCtx.fillRect(x * scale, y * scale, scale, scale);
+                        }
+                    }
+                }
+                
+                // Draw enemies
+                this.minimapCtx.fillStyle = '#ff0000';
+                for (const enemy of this.enemies) {
+                    if (enemy.health > 0) {
+                        this.minimapCtx.fillRect(enemy.x * scale - 2, enemy.y * scale - 2, 4, 4);
+                    }
+                }
+                
+                // Draw player
+                this.minimapCtx.fillStyle = '#00ff00';
+                this.minimapCtx.fillRect(this.player.x * scale - 2, this.player.y * scale - 2, 4, 4);
+                
+                // Draw player direction
+                this.minimapCtx.strokeStyle = '#00ff00';
+                this.minimapCtx.beginPath();
+                this.minimapCtx.moveTo(this.player.x * scale, this.player.y * scale);
+                this.minimapCtx.lineTo(
+                    this.player.x * scale + Math.cos(this.player.angle) * 10,
+                    this.player.y * scale + Math.sin(this.player.angle) * 10
+                );
+                this.minimapCtx.stroke();
+            }
+            
+            shoot() {
+                const now = Date.now();
+                if (now - this.weapon.lastShot < this.weapon.fireRate || this.weapon.ammo <= 0) return;
+                
+                this.weapon.lastShot = now;
+                this.weapon.ammo--;
+                this.weapon.recoil = 1; // Recoil effect
+                
+                // Check if we hit an enemy
+                const ray = this.castRay(this.player.angle);
+                
+                for (let i = 0; i < this.enemies.length; i++) {
+                    const enemy = this.enemies[i];
+                    if (enemy.health <= 0) continue;
+                    
+                    const dx = enemy.x - this.player.x;
+                    const dy = enemy.y - this.player.y;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+                    const angleToEnemy = Math.atan2(dy, dx);
+                    const angleDiff = Math.abs(angleToEnemy - this.player.angle);
+                    
+                    // Check if enemy is in crosshair and closer than wall
+                    if (angleDiff < 0.1 && distance < ray.distance) {
+                        enemy.health -= 34; // 3 shots to kill
+                        if (enemy.health <= 0) {
+                            this.kills++;
+                        }
+                        break;
+                    }
+                }
+                
+                this.updateUI();
+            }
+            
+            reload() {
+                const needed = this.weapon.maxAmmo - this.weapon.ammo;
+                const reloadAmount = Math.min(needed, this.weapon.totalAmmo);
+                this.weapon.ammo += reloadAmount;
+                this.weapon.totalAmmo -= reloadAmount;
+                this.updateUI();
+            }
+            
+            update(deltaTime) {
+                // Movement
+                const moveSpeed = this.player.speed * deltaTime;
+                
+                if (this.keys['w']) {
+                    const newX = this.player.x + Math.cos(this.player.angle) * moveSpeed;
+                    const newY = this.player.y + Math.sin(this.player.angle) * moveSpeed;
+                    if (this.canMoveTo(newX, newY)) {
+                        this.player.x = newX;
+                        this.player.y = newY;
+                    }
+                }
+                
+                if (this.keys['s']) {
+                    const newX = this.player.x - Math.cos(this.player.angle) * moveSpeed;
+                    const newY = this.player.y - Math.sin(this.player.angle) * moveSpeed;
+                    if (this.canMoveTo(newX, newY)) {
+                        this.player.x = newX;
+                        this.player.y = newY;
+                    }
+                }
+                
+                if (this.keys['a']) {
+                    const newX = this.player.x - Math.cos(this.player.angle + Math.PI/2) * moveSpeed;
+                    const newY = this.player.y - Math.sin(this.player.angle + Math.PI/2) * moveSpeed;
+                    if (this.canMoveTo(newX, newY)) {
+                        this.player.x = newX;
+                        this.player.y = newY;
+                    }
+                }
+                
+                if (this.keys['d']) {
+                    const newX = this.player.x + Math.cos(this.player.angle + Math.PI/2) * moveSpeed;
+                    const newY = this.player.y + Math.sin(this.player.angle + Math.PI/2) * moveSpeed;
+                    if (this.canMoveTo(newX, newY)) {
+                        this.player.x = newX;
+                        this.player.y = newY;
+                    }
+                }
+                
+                // Reduce recoil
+                this.weapon.recoil *= 0.9;
+                
+                // Update enemies (basic AI)
+                for (const enemy of this.enemies) {
+                    if (enemy.health <= 0) continue;
+                    
+                    const dx = this.player.x - enemy.x;
+                    const dy = this.player.y - enemy.y;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+                    
+                    if (distance < 6 && distance > 0.5) { // Chase player if close
+                        const angle = Math.atan2(dy, dx);
+                        const moveX = Math.cos(angle) * 0.01;
+                        const moveY = Math.sin(angle) * 0.01;
+                        
+                        if (this.canMoveTo(enemy.x + moveX, enemy.y + moveY)) {
+                            enemy.x += moveX;
+                            enemy.y += moveY;
+                        }
+                    }
+                    
+                    // Damage player if too close
+                    if (distance < 0.5) {
+                        this.player.health -= 0.5;
+                        if (this.player.health <= 0) {
+                            alert(`Game Over! Kills: ${this.kills}`);
+                            location.reload();
+                        }
+                    }
+                }
+            }
+            
+            canMoveTo(x, y) {
+                const mapX = Math.floor(x);
+                const mapY = Math.floor(y);
+                return mapX >= 0 && mapX < 16 && mapY >= 0 && mapY < 16 && this.map[mapY][mapX] === 0;
+            }
+            
+            updateUI() {
+                document.getElementById('health').textContent = Math.floor(this.player.health);
+                document.getElementById('kills').textContent = this.kills;
+                document.getElementById('ammo').textContent = this.weapon.ammo;
+                document.getElementById('totalAmmo').textContent = this.weapon.totalAmmo;
+            }
+            
+            gameLoop(currentTime) {
+                const deltaTime = currentTime - this.lastTime;
+                this.lastTime = currentTime;
+                
+                this.update(deltaTime);
+                this.render3D();
+                this.renderMinimap();
+                
+                requestAnimationFrame((time) => this.gameLoop(time));
+            }
+        }
+        
+        // Start game
+        window.addEventListener('load', () => {
+            new FPS3D();
+        });
+    </script>
+</body>
+</html>
