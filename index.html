@@ -3,33 +3,34 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Browser FPS</title>
+    <title>Browser CS - FPS</title>
     <style>
-        body {
+        * {
             margin: 0;
             padding: 0;
-            background: #1a1a1a;
-            color: white;
-            font-family: Arial, sans-serif;
-            overflow: hidden;
+            box-sizing: border-box;
         }
         
-        #gameContainer {
-            position: relative;
-            width: 100vw;
-            height: 100vh;
+        body {
+            background: #000;
+            color: #fff;
+            font-family: 'Courier New', monospace;
+            overflow: hidden;
+            cursor: none;
         }
         
         #gameCanvas {
             display: block;
-            background: linear-gradient(to bottom, #001122 0%, #003366 50%, #2a4a2a 100%);
-            cursor: crosshair;
+            background: #000;
         }
         
-        #ui {
+        #hud {
             position: absolute;
-            top: 20px;
-            left: 20px;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
             z-index: 10;
         }
         
@@ -40,15 +41,14 @@
             transform: translate(-50%, -50%);
             width: 20px;
             height: 20px;
-            pointer-events: none;
-            z-index: 5;
         }
         
         #crosshair::before,
         #crosshair::after {
             content: '';
             position: absolute;
-            background: #ff0000;
+            background: #00ff00;
+            box-shadow: 0 0 5px #00ff00;
         }
         
         #crosshair::before {
@@ -65,64 +65,187 @@
             height: 20px;
         }
         
-        #instructions {
+        #ui {
             position: absolute;
             bottom: 20px;
             left: 20px;
-            font-size: 14px;
+            font-size: 18px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+        }
+        
+        #ammoBar {
+            position: absolute;
+            bottom: 80px;
+            right: 20px;
+            width: 200px;
+            height: 40px;
+        }
+        
+        .bar {
+            background: rgba(255,255,255,0.2);
+            border: 2px solid #fff;
+            height: 100%;
+            position: relative;
+        }
+        
+        .bar-fill {
+            background: linear-gradient(90deg, #ff0000, #ffff00, #00ff00);
+            height: 100%;
+            transition: width 0.2s;
+        }
+        
+        .bar-text {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-weight: bold;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
+        }
+        
+        #weapon {
+            position: absolute;
+            bottom: 0;
+            right: 0;
+            width: 300px;
+            height: 200px;
+            background: linear-gradient(45deg, #333, #666);
+            border-left: 3px solid #888;
+            border-top: 3px solid #888;
+        }
+        
+        #minimap {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            width: 150px;
+            height: 150px;
+            background: rgba(0,0,0,0.7);
+            border: 2px solid #00ff00;
+        }
+        
+        #instructions {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            font-size: 12px;
             opacity: 0.8;
         }
         
-        .enemy {
+        .damage-indicator {
             position: absolute;
-            background: #ff3333;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(circle, transparent 40%, rgba(255,0,0,0.3) 100%);
+            opacity: 0;
+            transition: opacity 0.3s;
+            pointer-events: none;
+        }
+        
+        @keyframes muzzleFlash {
+            0% { opacity: 1; transform: scale(1); }
+            100% { opacity: 0; transform: scale(2); }
+        }
+        
+        .muzzle-flash {
+            position: absolute;
+            bottom: 100px;
+            right: 50px;
+            width: 50px;
+            height: 50px;
+            background: radial-gradient(circle, #ffff00, transparent);
             border-radius: 50%;
+            animation: muzzleFlash 0.1s ease-out;
         }
     </style>
 </head>
 <body>
-    <div id="gameContainer">
-        <canvas id="gameCanvas"></canvas>
+    <canvas id="gameCanvas"></canvas>
+    <div id="hud">
         <div id="crosshair"></div>
-        <div id="ui">
-            <div>Punkte: <span id="score">0</span></div>
-            <div>Munition: <span id="ammo">30</span></div>
-            <div>Leben: <span id="health">100</span></div>
-        </div>
         <div id="instructions">
-            WASD: Bewegung | Maus: Zielen | Klick: Schießen | R: Nachladen
+            WASD: Bewegung | Maus: Umschauen | Klick: Schießen | R: Nachladen | Shift: Laufen
         </div>
+        <div id="ui">
+            <div>Gesundheit: <span id="health">100</span></div>
+            <div>Kills: <span id="kills">0</span></div>
+            <div>Waffe: AK-47</div>
+        </div>
+        <div id="ammoBar">
+            <div class="bar">
+                <div class="bar-fill" id="ammoFill" style="width: 100%;"></div>
+                <div class="bar-text" id="ammoText">30/90</div>
+            </div>
+        </div>
+        <canvas id="minimap"></canvas>
+        <div id="weapon"></div>
+        <div class="damage-indicator" id="damageIndicator"></div>
     </div>
 
     <script>
-        class FPSGame {
+        class FPS3D {
             constructor() {
                 this.canvas = document.getElementById('gameCanvas');
                 this.ctx = this.canvas.getContext('2d');
+                this.minimap = document.getElementById('minimap');
+                this.minimapCtx = this.minimap.getContext('2d');
+                
                 this.resizeCanvas();
                 
+                // Game state
                 this.player = {
-                    x: 0,
-                    y: 0,
+                    x: 5,
+                    y: 5,
                     angle: 0,
                     health: 100,
-                    ammo: 30,
-                    maxAmmo: 30
+                    maxHealth: 100,
+                    speed: 0.1,
+                    rotSpeed: 0.003,
+                    weapon: {
+                        ammo: 30,
+                        maxAmmo: 30,
+                        totalAmmo: 90,
+                        damage: 25,
+                        recoil: 0,
+                        fireRate: 100,
+                        lastShot: 0
+                    }
                 };
                 
-                this.enemies = [];
-                this.bullets = [];
-                this.particles = [];
-                this.score = 0;
-                this.lastEnemySpawn = 0;
-                this.enemySpawnRate = 2000;
+                // Map (1 = wall, 0 = empty)
+                this.map = [
+                    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+                    [1,0,1,1,0,0,0,1,1,1,1,0,0,1,0,1],
+                    [1,0,1,0,0,0,0,0,0,0,1,0,0,1,0,1],
+                    [1,0,1,0,0,1,1,1,0,0,1,0,0,0,0,1],
+                    [1,0,0,0,0,1,0,1,0,0,0,0,1,1,0,1],
+                    [1,0,0,0,0,1,0,1,0,0,0,0,0,1,0,1],
+                    [1,0,1,1,0,1,0,1,1,1,0,0,0,0,0,1],
+                    [1,0,0,0,0,0,0,0,0,0,0,1,1,1,0,1],
+                    [1,0,0,1,0,0,0,0,0,0,0,0,0,0,0,1],
+                    [1,0,0,1,0,0,0,1,1,0,0,0,0,1,0,1],
+                    [1,0,0,1,1,1,0,1,0,0,0,1,0,1,0,1],
+                    [1,0,0,0,0,0,0,1,0,0,0,1,0,0,0,1],
+                    [1,0,1,1,1,1,0,0,0,1,0,1,1,1,0,1],
+                    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+                    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
+                ];
+                
+                this.enemies = [
+                    {x: 8, y: 8, health: 100, angle: 0, lastSeen: 0, state: 'patrol'},
+                    {x: 12, y: 3, health: 100, angle: 1.5, lastSeen: 0, state: 'patrol'},
+                    {x: 3, y: 12, health: 100, angle: 3, lastSeen: 0, state: 'patrol'},
+                    {x: 13, y: 13, health: 100, angle: 4.5, lastSeen: 0, state: 'patrol'}
+                ];
                 
                 this.keys = {};
-                this.mouseX = this.canvas.width / 2;
-                this.mouseY = this.canvas.height / 2;
+                this.mouseX = 0;
+                this.mouseY = 0;
+                this.kills = 0;
+                this.rays = [];
                 
                 this.initEventListeners();
-                this.spawnEnemy();
                 this.gameLoop();
             }
             
@@ -145,276 +268,130 @@
                     this.keys[e.key.toLowerCase()] = false;
                 });
                 
-                this.canvas.addEventListener('mousemove', (e) => {
-                    this.mouseX = e.clientX;
-                    this.mouseY = e.clientY;
-                    this.player.angle = Math.atan2(
-                        e.clientY - this.canvas.height / 2,
-                        e.clientX - this.canvas.width / 2
-                    );
+                document.addEventListener('mousemove', (e) => {
+                    if (document.pointerLockElement) {
+                        this.player.angle += e.movementX * this.player.rotSpeed;
+                        // Begrenzte vertikale Bewegung für Recoil-Effekt
+                        this.player.recoil = Math.max(0, this.player.recoil - e.movementY * 0.01);
+                    }
                 });
                 
-                this.canvas.addEventListener('click', (e) => {
-                    this.shoot();
+                document.addEventListener('click', (e) => {
+                    if (!document.pointerLockElement) {
+                        this.canvas.requestPointerLock();
+                    } else {
+                        this.shoot();
+                    }
                 });
                 
-                // Prevent context menu
-                this.canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+                document.addEventListener('pointerlockchange', () => {
+                    if (document.pointerLockElement) {
+                        document.body.style.cursor = 'none';
+                    }
+                });
             }
             
-            shoot() {
-                if (this.player.ammo > 0) {
-                    this.player.ammo--;
+            castRay(angle) {
+                const stepSize = 0.02;
+                let x = this.player.x;
+                let y = this.player.y;
+                
+                const dx = Math.cos(angle) * stepSize;
+                const dy = Math.sin(angle) * stepSize;
+                
+                let distance = 0;
+                
+                while (distance < 20) {
+                    x += dx;
+                    y += dy;
+                    distance += stepSize;
                     
-                    const bullet = {
-                        x: this.canvas.width / 2,
-                        y: this.canvas.height / 2,
-                        vx: Math.cos(this.player.angle) * 15,
-                        vy: Math.sin(this.player.angle) * 15,
-                        life: 100
-                    };
+                    const mapX = Math.floor(x);
+                    const mapY = Math.floor(y);
                     
-                    this.bullets.push(bullet);
-                    this.updateUI();
-                    
-                    // Muzzle flash particles
-                    for (let i = 0; i < 5; i++) {
-                        this.particles.push({
-                            x: this.canvas.width / 2 + Math.cos(this.player.angle) * 30,
-                            y: this.canvas.height / 2 + Math.sin(this.player.angle) * 30,
-                            vx: (Math.random() - 0.5) * 4,
-                            vy: (Math.random() - 0.5) * 4,
-                            life: 10,
-                            maxLife: 10,
-                            color: '#ffff00'
-                        });
+                    if (mapX < 0 || mapX >= this.map[0].length || 
+                        mapY < 0 || mapY >= this.map.length || 
+                        this.map[mapY][mapX] === 1) {
+                        break;
                     }
                 }
+                
+                return {distance, x, y};
             }
             
-            reload() {
-                this.player.ammo = this.player.maxAmmo;
-                this.updateUI();
-            }
-            
-            spawnEnemy() {
-                const side = Math.floor(Math.random() * 4);
-                let x, y;
+            render3D() {
+                const fov = Math.PI / 3;
+                const numRays = this.canvas.width;
+                const rayAngleStep = fov / numRays;
                 
-                switch(side) {
-                    case 0: // Top
-                        x = Math.random() * this.canvas.width;
-                        y = -50;
-                        break;
-                    case 1: // Right
-                        x = this.canvas.width + 50;
-                        y = Math.random() * this.canvas.height;
-                        break;
-                    case 2: // Bottom
-                        x = Math.random() * this.canvas.width;
-                        y = this.canvas.height + 50;
-                        break;
-                    case 3: // Left
-                        x = -50;
-                        y = Math.random() * this.canvas.height;
-                        break;
-                }
+                this.rays = [];
                 
-                this.enemies.push({
-                    x: x,
-                    y: y,
-                    size: 20 + Math.random() * 20,
-                    speed: 0.5 + Math.random() * 1.5,
-                    health: 2 + Math.floor(Math.random() * 3),
-                    maxHealth: 2 + Math.floor(Math.random() * 3)
-                });
-            }
-            
-            update() {
-                const currentTime = Date.now();
+                // Clear screen
+                this.ctx.fillStyle = '#87CEEB'; // Sky
+                this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height / 2);
+                this.ctx.fillStyle = '#654321'; // Ground
+                this.ctx.fillRect(0, this.canvas.height / 2, this.canvas.width, this.canvas.height / 2);
                 
-                // Spawn enemies
-                if (currentTime - this.lastEnemySpawn > this.enemySpawnRate) {
-                    this.spawnEnemy();
-                    this.lastEnemySpawn = currentTime;
-                    this.enemySpawnRate = Math.max(500, this.enemySpawnRate - 50);
-                }
-                
-                // Move player (camera effect)
-                const speed = 3;
-                if (this.keys['w'] || this.keys['arrowup']) {
-                    this.player.y -= speed;
-                }
-                if (this.keys['s'] || this.keys['arrowdown']) {
-                    this.player.y += speed;
-                }
-                if (this.keys['a'] || this.keys['arrowleft']) {
-                    this.player.x -= speed;
-                }
-                if (this.keys['d'] || this.keys['arrowright']) {
-                    this.player.x += speed;
-                }
-                
-                // Update bullets
-                for (let i = this.bullets.length - 1; i >= 0; i--) {
-                    const bullet = this.bullets[i];
-                    bullet.x += bullet.vx;
-                    bullet.y += bullet.vy;
-                    bullet.life--;
+                // Cast rays and draw walls
+                for (let i = 0; i < numRays; i += 2) {
+                    const rayAngle = this.player.angle - fov / 2 + i * rayAngleStep;
+                    const ray = this.castRay(rayAngle);
+                    this.rays.push(ray);
                     
-                    // Remove bullets that are off screen or expired
-                    if (bullet.life <= 0 || 
-                        bullet.x < 0 || bullet.x > this.canvas.width ||
-                        bullet.y < 0 || bullet.y > this.canvas.height) {
-                        this.bullets.splice(i, 1);
-                        continue;
-                    }
+                    // Perspectiv correction
+                    const correctedDistance = ray.distance * Math.cos(rayAngle - this.player.angle);
                     
-                    // Check bullet-enemy collision
-                    for (let j = this.enemies.length - 1; j >= 0; j--) {
-                        const enemy = this.enemies[j];
-                        const dx = bullet.x - enemy.x;
-                        const dy = bullet.y - enemy.y;
-                        const distance = Math.sqrt(dx * dx + dy * dy);
+                    if (correctedDistance > 0) {
+                        const wallHeight = (this.canvas.height / 2) / correctedDistance;
+                        const wallTop = (this.canvas.height / 2) - wallHeight + this.player.weapon.recoil * 50;
+                        const wallBottom = wallTop + wallHeight * 2;
                         
-                        if (distance < enemy.size / 2) {
-                            // Hit!
-                            this.bullets.splice(i, 1);
-                            enemy.health--;
-                            
-                            // Create hit particles
-                            for (let k = 0; k < 8; k++) {
-                                this.particles.push({
-                                    x: enemy.x,
-                                    y: enemy.y,
-                                    vx: (Math.random() - 0.5) * 6,
-                                    vy: (Math.random() - 0.5) * 6,
-                                    life: 15,
-                                    maxLife: 15,
-                                    color: '#ff6666'
-                                });
-                            }
-                            
-                            if (enemy.health <= 0) {
-                                this.enemies.splice(j, 1);
-                                this.score += 10;
-                                this.updateUI();
-                            }
-                            break;
-                        }
-                    }
-                }
-                
-                // Update enemies
-                for (let i = this.enemies.length - 1; i >= 0; i--) {
-                    const enemy = this.enemies[i];
-                    const dx = (this.canvas.width / 2) - enemy.x - this.player.x;
-                    const dy = (this.canvas.height / 2) - enemy.y - this.player.y;
-                    const distance = Math.sqrt(dx * dx + dy * dy);
-                    
-                    // Move towards player
-                    enemy.x += (dx / distance) * enemy.speed;
-                    enemy.y += (dy / distance) * enemy.speed;
-                    
-                    // Check if enemy reached player
-                    if (distance < 30) {
-                        this.player.health -= 10;
-                        this.enemies.splice(i, 1);
-                        this.updateUI();
+                        // Wall shading based on distance
+                        const brightness = Math.max(0.2, 1 - correctedDistance / 10);
+                        const color = Math.floor(brightness * 255);
                         
-                        if (this.player.health <= 0) {
-                            alert(`Game Over! Endpunktzahl: ${this.score}`);
-                            location.reload();
+                        // Different wall colors based on position
+                        const wallType = Math.floor(ray.x + ray.y) % 3;
+                        if (wallType === 0) {
+                            this.ctx.fillStyle = `rgb(${color}, ${Math.floor(color * 0.8)}, ${Math.floor(color * 0.6)})`;
+                        } else if (wallType === 1) {
+                            this.ctx.fillStyle = `rgb(${Math.floor(color * 0.8)}, ${color}, ${Math.floor(color * 0.6)})`;
+                        } else {
+                            this.ctx.fillStyle = `rgb(${Math.floor(color * 0.6)}, ${Math.floor(color * 0.8)}, ${color})`;
                         }
+                        
+                        this.ctx.fillRect(i, wallTop, 2, wallBottom - wallTop);
                     }
                 }
-                
-                // Update particles
-                for (let i = this.particles.length - 1; i >= 0; i--) {
-                    const particle = this.particles[i];
-                    particle.x += particle.vx;
-                    particle.y += particle.vy;
-                    particle.life--;
-                    
-                    if (particle.life <= 0) {
-                        this.particles.splice(i, 1);
-                    }
-                }
-            }
-            
-            render() {
-                // Clear canvas
-                this.ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
-                this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-                
-                this.ctx.save();
-                this.ctx.translate(-this.player.x, -this.player.y);
                 
                 // Draw enemies
+                this.renderEnemies();
+            }
+            
+            renderEnemies() {
                 for (const enemy of this.enemies) {
-                    const healthPercent = enemy.health / enemy.maxHealth;
-                    this.ctx.fillStyle = `rgb(${255 - healthPercent * 100}, ${healthPercent * 100}, 0)`;
-                    this.ctx.beginPath();
-                    this.ctx.arc(enemy.x, enemy.y, enemy.size / 2, 0, Math.PI * 2);
-                    this.ctx.fill();
+                    if (enemy.health <= 0) continue;
                     
-                    // Enemy eyes
-                    this.ctx.fillStyle = 'white';
-                    this.ctx.beginPath();
-                    this.ctx.arc(enemy.x - 5, enemy.y - 5, 3, 0, Math.PI * 2);
-                    this.ctx.fill();
-                    this.ctx.beginPath();
-                    this.ctx.arc(enemy.x + 5, enemy.y - 5, 3, 0, Math.PI * 2);
-                    this.ctx.fill();
-                }
-                
-                this.ctx.restore();
-                
-                // Draw bullets
-                this.ctx.fillStyle = '#ffff00';
-                for (const bullet of this.bullets) {
-                    this.ctx.beginPath();
-                    this.ctx.arc(bullet.x, bullet.y, 3, 0, Math.PI * 2);
-                    this.ctx.fill();
-                }
-                
-                // Draw particles
-                for (const particle of this.particles) {
-                    const alpha = particle.life / particle.maxLife;
-                    this.ctx.fillStyle = particle.color + Math.floor(alpha * 255).toString(16).padStart(2, '0');
-                    this.ctx.beginPath();
-                    this.ctx.arc(particle.x, particle.y, 2, 0, Math.PI * 2);
-                    this.ctx.fill();
-                }
-                
-                // Draw weapon
-                this.ctx.save();
-                this.ctx.translate(this.canvas.width / 2, this.canvas.height / 2);
-                this.ctx.rotate(this.player.angle);
-                this.ctx.fillStyle = '#666';
-                this.ctx.fillRect(20, -5, 40, 10);
-                this.ctx.fillStyle = '#333';
-                this.ctx.fillRect(55, -3, 15, 6);
-                this.ctx.restore();
-            }
-            
-            updateUI() {
-                document.getElementById('score').textContent = this.score;
-                document.getElementById('ammo').textContent = this.player.ammo;
-                document.getElementById('health').textContent = this.player.health;
-            }
-            
-            gameLoop() {
-                this.update();
-                this.render();
-                requestAnimationFrame(() => this.gameLoop());
-            }
-        }
-        
-        // Start game when page loads
-        window.addEventListener('load', () => {
-            new FPSGame();
-        });
-    </script>
-</body>
-</html>
+                    const dx = enemy.x - this.player.x;
+                    const dy = enemy.y - this.player.y;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+                    
+                    if (distance > 15) continue; // Too far to render
+                    
+                    const angleToEnemy = Math.atan2(dy, dx);
+                    let angleDiff = angleToEnemy - this.player.angle;
+                    
+                    // Normalize angle
+                    while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
+                    while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
+                    
+                    if (Math.abs(angleDiff) < Math.PI / 3) { // In FOV
+                        const screenX = (angleDiff + Math.PI / 3) / (2 * Math.PI / 3) * this.canvas.width;
+                        const enemyHeight = (this.canvas.height / 4) / distance;
+                        const enemyWidth = enemyHeight;
+                        
+                        const screenY = this.canvas.height / 2 - enemyHeight / 2;
+                        
+                        // Enemy color based on health
+                        const healthPercent = enemy.health / 100;
+                        this.ctx.fillStyle = `rgb
