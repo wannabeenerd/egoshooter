@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Browser CS - 3D FPS</title>
+    <title>CS2 Browser - Anubis Map</title>
     <style>
         * {
             margin: 0;
@@ -14,7 +14,7 @@
         body {
             background: #000;
             color: #fff;
-            font-family: 'Courier New', monospace;
+            font-family: 'Arial', sans-serif;
             overflow: hidden;
         }
         
@@ -39,76 +39,106 @@
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            width: 20px;
-            height: 20px;
+            width: 16px;
+            height: 16px;
         }
         
         #crosshair::before,
         #crosshair::after {
             content: '';
             position: absolute;
-            background: #00ff00;
-            box-shadow: 0 0 5px #00ff00;
+            background: #ffffff;
+            box-shadow: 0 0 3px #000;
         }
         
         #crosshair::before {
-            top: 9px;
+            top: 7px;
             left: 0;
-            width: 20px;
+            width: 16px;
             height: 2px;
         }
         
         #crosshair::after {
             top: 0;
-            left: 9px;
+            left: 7px;
             width: 2px;
-            height: 20px;
+            height: 16px;
         }
         
         #ui {
             position: absolute;
             bottom: 20px;
             left: 20px;
-            font-size: 18px;
+            font-size: 16px;
             text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+            font-weight: bold;
         }
         
         #ammoDisplay {
             position: absolute;
             bottom: 20px;
             right: 20px;
-            font-size: 24px;
+            font-size: 28px;
             font-weight: bold;
             text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+            color: #ffaa00;
         }
         
         #minimap {
             position: absolute;
             top: 20px;
             right: 20px;
-            width: 150px;
-            height: 150px;
-            background: rgba(0,0,0,0.7);
-            border: 2px solid #00ff00;
+            width: 160px;
+            height: 160px;
+            background: rgba(0,0,0,0.8);
+            border: 2px solid #d4af37;
+            border-radius: 4px;
         }
         
         #instructions {
             position: absolute;
             top: 20px;
             left: 20px;
+            font-size: 11px;
+            opacity: 0.9;
+            color: #ffaa00;
+        }
+        
+        #settings {
+            position: absolute;
+            top: 80px;
+            left: 20px;
             font-size: 12px;
             opacity: 0.8;
+            color: #aaa;
         }
         
         #weapon {
             position: absolute;
-            bottom: -50px;
-            right: 100px;
+            bottom: -30px;
+            right: 80px;
+            width: 250px;
+            height: 120px;
+            background: linear-gradient(45deg, #2a2a2a, #4a4a4a, #1a1a1a);
+            border-left: 3px solid #666;
+            border-top: 2px solid #888;
+            clip-path: polygon(0% 50%, 15% 30%, 85% 35%, 100% 55%, 95% 100%, 5% 100%);
+        }
+        
+        .health-bar {
+            position: absolute;
+            bottom: 60px;
+            left: 20px;
             width: 200px;
-            height: 150px;
-            background: linear-gradient(45deg, #444, #666, #333);
-            border: 2px solid #888;
-            clip-path: polygon(0% 40%, 20% 30%, 80% 35%, 100% 50%, 90% 100%, 10% 100%);
+            height: 20px;
+            background: rgba(0,0,0,0.7);
+            border: 1px solid #fff;
+        }
+        
+        .health-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #ff0000, #ffff00, #00ff00);
+            transition: width 0.3s;
         }
     </style>
 </head>
@@ -117,12 +147,19 @@
     <div id="hud">
         <div id="crosshair"></div>
         <div id="instructions">
-            WASD: Bewegung | Maus: Umschauen | Klick: Schießen | R: Nachladen
+            WASD: Bewegung | Maus: Umschauen | Klick: Schießen | R: Nachladen<br>
+            1-4: Geschwindigkeit ändern | TAB: Settings
+        </div>
+        <div id="settings">
+            Geschwindigkeit: <span id="speedLevel">2</span>/4 | Map: de_anubis_browser
         </div>
         <div id="ui">
-            <div>Gesundheit: <span id="health">100</span></div>
-            <div>Kills: <span id="kills">0</span></div>
-            <div>Waffe: AK-47</div>
+            <div style="color: #00ff00;">❤ <span id="health">100</span> HP</div>
+            <div style="color: #ffaa00;">★ Kills: <span id="kills">0</span></div>
+            <div style="color: #aaa;">🔫 AK-47</div>
+        </div>
+        <div class="health-bar">
+            <div class="health-fill" id="healthBar" style="width: 100%;"></div>
         </div>
         <div id="ammoDisplay">
             <span id="ammo">30</span>/<span id="totalAmmo">90</span>
@@ -132,7 +169,7 @@
     </div>
 
     <script>
-        class FPS3D {
+        class CS2Game {
             constructor() {
                 this.canvas = document.getElementById('gameCanvas');
                 this.ctx = this.canvas.getContext('2d');
@@ -143,14 +180,18 @@
                 
                 // Player state
                 this.player = {
-                    x: 2,
-                    y: 2,
+                    x: 2.5,
+                    y: 2.5,
                     angle: 0,
                     health: 100,
                     maxHealth: 100,
-                    speed: 0.05,
-                    rotSpeed: 0.002
+                    baseSpeed: 0.01, // Viel langsamer!
+                    speedMultiplier: 2, // Standard = Level 2
+                    rotSpeed: 0.0015
                 };
+                
+                // Speed levels (1=sehr langsam, 4=schnell)
+                this.speedLevels = [0.8, 1.0, 1.5, 2.0];
                 
                 // Weapon state
                 this.weapon = {
@@ -159,35 +200,38 @@
                     totalAmmo: 90,
                     recoil: 0,
                     lastShot: 0,
-                    fireRate: 150
+                    fireRate: 120
                 };
                 
-                // 16x16 Map (1 = wall, 0 = empty)
+                // Anubis-inspired 18x18 map (1=sandstone wall, 2=dark wall, 3=pillar, 0=ground)
                 this.map = [
-                    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
-                    [1,0,0,0,0,0,0,0,1,0,0,0,0,0,0,1],
-                    [1,0,1,1,0,0,0,0,1,0,0,0,1,1,0,1],
-                    [1,0,1,0,0,0,0,0,0,0,0,0,0,1,0,1],
-                    [1,0,1,0,0,1,1,1,0,0,1,1,1,0,0,1],
-                    [1,0,0,0,0,1,0,0,0,0,0,0,1,0,0,1],
-                    [1,0,0,0,0,1,0,0,0,0,0,0,1,0,0,1],
-                    [1,0,1,1,0,1,0,0,0,0,0,0,1,0,1,1],
-                    [1,0,0,0,0,0,0,0,1,1,0,0,0,0,0,1],
-                    [1,1,0,0,0,0,0,0,1,1,0,0,0,0,1,1],
-                    [1,0,0,1,0,0,0,0,0,0,0,0,1,0,0,1],
-                    [1,0,0,1,1,1,0,0,0,0,1,1,1,0,0,1],
-                    [1,0,0,0,0,0,0,0,1,0,0,0,0,0,0,1],
-                    [1,0,1,1,1,1,0,0,1,0,0,1,1,1,0,1],
-                    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
-                    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
+                    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                    [1,0,0,0,0,2,0,0,0,0,0,0,2,0,0,0,0,1],
+                    [1,0,3,0,0,2,0,3,3,3,3,0,2,0,0,3,0,1],
+                    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+                    [1,0,0,2,2,0,0,0,0,0,0,0,0,2,2,0,0,1],
+                    [1,2,0,0,0,0,0,2,2,2,2,0,0,0,0,0,2,1],
+                    [1,0,0,0,0,0,0,2,0,0,2,0,0,0,0,0,0,1],
+                    [1,0,3,0,0,2,0,2,0,0,2,0,2,0,0,3,0,1],
+                    [1,0,0,0,0,2,0,0,0,0,0,0,2,0,0,0,0,1],
+                    [1,0,0,0,0,2,0,0,0,0,0,0,2,0,0,0,0,1],
+                    [1,0,3,0,0,2,0,2,0,0,2,0,2,0,0,3,0,1],
+                    [1,0,0,0,0,0,0,2,0,0,2,0,0,0,0,0,0,1],
+                    [1,2,0,0,0,0,0,2,2,2,2,0,0,0,0,0,2,1],
+                    [1,0,0,2,2,0,0,0,0,0,0,0,0,2,2,0,0,1],
+                    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+                    [1,0,3,0,0,2,0,3,3,3,3,0,2,0,0,3,0,1],
+                    [1,0,0,0,0,2,0,0,0,0,0,0,2,0,0,0,0,1],
+                    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
                 ];
                 
-                // Enemies
+                // Realistic enemies with human-like appearance
                 this.enemies = [
-                    {x: 8, y: 3, health: 100, maxHealth: 100, angle: 0, state: 'patrol', target: null, lastSeen: 0, size: 0.3},
-                    {x: 12, y: 6, health: 100, maxHealth: 100, angle: 1.5, state: 'patrol', target: null, lastSeen: 0, size: 0.3},
-                    {x: 6, y: 12, health: 100, maxHealth: 100, angle: 3, state: 'patrol', target: null, lastSeen: 0, size: 0.3},
-                    {x: 13, y: 13, health: 100, maxHealth: 100, angle: 4.5, state: 'patrol', target: null, lastSeen: 0, size: 0.3}
+                    {x: 8.5, y: 4.5, health: 100, maxHealth: 100, angle: 0, state: 'patrol', size: 0.4, skin: 'ct'},
+                    {x: 14.5, y: 7.5, health: 100, maxHealth: 100, angle: 1.5, state: 'patrol', size: 0.4, skin: 'ct'},
+                    {x: 4.5, y: 13.5, health: 100, maxHealth: 100, angle: 3, state: 'patrol', size: 0.4, skin: 't'},
+                    {x: 15.5, y: 15.5, health: 100, maxHealth: 100, angle: 4.5, state: 'patrol', size: 0.4, skin: 't'},
+                    {x: 9.5, y: 9.5, health: 100, maxHealth: 100, angle: 2, state: 'patrol', size: 0.4, skin: 'ct'}
                 ];
                 
                 this.keys = {};
@@ -202,8 +246,8 @@
             resizeCanvas() {
                 this.canvas.width = window.innerWidth;
                 this.canvas.height = window.innerHeight;
-                this.minimap.width = 150;
-                this.minimap.height = 150;
+                this.minimap.width = 160;
+                this.minimap.height = 160;
             }
             
             requestPointerLock() {
@@ -217,8 +261,15 @@
                 
                 document.addEventListener('keydown', (e) => {
                     this.keys[e.key.toLowerCase()] = true;
+                    
                     if (e.key.toLowerCase() === 'r') {
                         this.reload();
+                    }
+                    
+                    // Speed controls
+                    if (e.key >= '1' && e.key <= '4') {
+                        this.player.speedMultiplier = parseInt(e.key);
+                        document.getElementById('speedLevel').textContent = e.key;
                     }
                 });
                 
@@ -239,9 +290,8 @@
                 });
             }
             
-            // Raycasting function
             castRay(angle) {
-                const stepSize = 0.01;
+                const stepSize = 0.005; // Höhere Präzision
                 let x = this.player.x;
                 let y = this.player.y;
                 let distance = 0;
@@ -249,7 +299,7 @@
                 const dx = Math.cos(angle) * stepSize;
                 const dy = Math.sin(angle) * stepSize;
                 
-                while (distance < 16) {
+                while (distance < 20) {
                     x += dx;
                     y += dy;
                     distance += stepSize;
@@ -257,160 +307,195 @@
                     const mapX = Math.floor(x);
                     const mapY = Math.floor(y);
                     
-                    if (mapX < 0 || mapX >= 16 || mapY < 0 || mapY >= 16 || this.map[mapY][mapX] === 1) {
+                    if (mapX < 0 || mapX >= 18 || mapY < 0 || mapY >= 18 || this.map[mapY][mapX] > 0) {
                         return {
                             distance: distance,
                             hitX: x,
                             hitY: y,
+                            wallType: this.map[mapY] ? this.map[mapY][mapX] : 1,
                             wall: true
                         };
                     }
                 }
                 
-                return {distance: 16, hitX: x, hitY: y, wall: false};
+                return {distance: 20, hitX: x, hitY: y, wallType: 0, wall: false};
             }
             
-            // Main 3D rendering
             render3D() {
-                // Clear canvas with gradient sky
+                // Desert sky gradient (Anubis-style)
                 const gradient = this.ctx.createLinearGradient(0, 0, 0, this.canvas.height);
-                gradient.addColorStop(0, '#001122');
-                gradient.addColorStop(0.5, '#003366');
-                gradient.addColorStop(1, '#2a4a2a');
+                gradient.addColorStop(0, '#FFE4B5');   // Sandfarbe oben
+                gradient.addColorStop(0.3, '#DEB887'); // Burlywood
+                gradient.addColorStop(0.7, '#D2B48C'); // Tan
+                gradient.addColorStop(1, '#8B7355');   // Dunkler Sand (Boden)
                 this.ctx.fillStyle = gradient;
                 this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
                 
-                const fov = Math.PI / 3; // 60 degrees
-                const numRays = this.canvas.width / 2; // Optimization: every 2 pixels
+                const fov = Math.PI / 3;
+                const numRays = Math.floor(this.canvas.width / 1.5); // Bessere Qualität
                 
-                // Cast rays for 3D view
                 for (let i = 0; i < numRays; i++) {
                     const rayAngle = this.player.angle - fov / 2 + (i / numRays) * fov;
                     const ray = this.castRay(rayAngle);
                     
                     if (ray.wall) {
-                        // Calculate perspective-corrected distance
                         const correctedDistance = ray.distance * Math.cos(rayAngle - this.player.angle);
-                        
-                        // Calculate wall height on screen
                         const wallHeight = this.canvas.height / correctedDistance;
-                        const wallTop = (this.canvas.height - wallHeight) / 2 + this.weapon.recoil * 20;
+                        const wallTop = (this.canvas.height - wallHeight) / 2 + this.weapon.recoil * 15;
                         
-                        // Wall shading based on distance
-                        const brightness = Math.max(0.1, 1 - correctedDistance / 8);
+                        const brightness = Math.max(0.15, 1 - correctedDistance / 12);
                         
-                        // Different wall textures based on hit position
-                        const wallType = (Math.floor(ray.hitX * 4) + Math.floor(ray.hitY * 4)) % 3;
+                        // Anubis-Style Texturen
                         let r, g, b;
-                        
-                        if (wallType === 0) {
-                            r = Math.floor(150 * brightness);
-                            g = Math.floor(100 * brightness);
-                            b = Math.floor(50 * brightness);
-                        } else if (wallType === 1) {
-                            r = Math.floor(100 * brightness);
-                            g = Math.floor(150 * brightness);
-                            b = Math.floor(100 * brightness);
-                        } else {
+                        if (ray.wallType === 1) { // Sandstein
+                            r = Math.floor(218 * brightness); // Sandstone
+                            g = Math.floor(165 * brightness);
+                            b = Math.floor(32 * brightness);
+                        } else if (ray.wallType === 2) { // Dunkle Wände
                             r = Math.floor(80 * brightness);
-                            g = Math.floor(80 * brightness);
-                            b = Math.floor(150 * brightness);
+                            g = Math.floor(60 * brightness);
+                            b = Math.floor(40 * brightness);
+                        } else if (ray.wallType === 3) { // Säulen
+                            r = Math.floor(160 * brightness);
+                            g = Math.floor(130 * brightness);
+                            b = Math.floor(80 * brightness);
                         }
                         
-                        this.ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
-                        this.ctx.fillRect(i * 2, wallTop, 2, wallHeight);
+                        // Textur-Simulation durch Variationen
+                        const textureOffset = (Math.sin(ray.hitX * 20) + Math.sin(ray.hitY * 20)) * 0.1;
+                        r += textureOffset * 30;
+                        g += textureOffset * 20;
+                        b += textureOffset * 10;
+                        
+                        this.ctx.fillStyle = `rgb(${Math.max(0, Math.min(255, r))}, ${Math.max(0, Math.min(255, g))}, ${Math.max(0, Math.min(255, b))})`;
+                        this.ctx.fillRect(i * 1.5, wallTop, 1.5, wallHeight);
                     }
                 }
                 
-                // Render enemies
                 this.renderEnemies();
             }
             
             renderEnemies() {
                 const fov = Math.PI / 3;
                 
-                for (let i = 0; i < this.enemies.length; i++) {
-                    const enemy = this.enemies[i];
+                for (const enemy of this.enemies) {
                     if (enemy.health <= 0) continue;
                     
                     const dx = enemy.x - this.player.x;
                     const dy = enemy.y - this.player.y;
                     const distance = Math.sqrt(dx * dx + dy * dy);
                     
-                    if (distance > 10) continue; // Too far to render
+                    if (distance > 12) continue;
                     
-                    // Check if enemy is in FOV
                     const angleToEnemy = Math.atan2(dy, dx);
                     let angleDiff = angleToEnemy - this.player.angle;
                     
-                    // Normalize angle difference
                     while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
                     while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
                     
                     if (Math.abs(angleDiff) < fov / 2) {
-                        // Check if enemy is behind a wall
                         const rayToEnemy = this.castRay(angleToEnemy);
-                        if (rayToEnemy.distance < distance - 0.1) continue; // Behind wall
+                        if (rayToEnemy.distance < distance - 0.1) continue;
                         
-                        // Calculate screen position
                         const screenX = (angleDiff + fov / 2) / fov * this.canvas.width;
-                        const enemyHeight = this.canvas.height / distance * enemy.size * 3;
-                        const enemyWidth = enemyHeight;
-                        
+                        const enemyHeight = this.canvas.height / distance * enemy.size * 4;
+                        const enemyWidth = enemyHeight * 0.6;
                         const screenY = this.canvas.height / 2 - enemyHeight / 2;
                         
-                        // Enemy color based on health
-                        const healthPercent = enemy.health / enemy.maxHealth;
-                        const r = Math.floor(255 * (1 - healthPercent) + 100 * healthPercent);
-                        const g = Math.floor(100 * healthPercent);
-                        const b = Math.floor(100 * healthPercent);
-                        
-                        // Draw enemy as a simple rectangle (sprite simulation)
-                        this.ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
-                        this.ctx.fillRect(screenX - enemyWidth / 2, screenY, enemyWidth, enemyHeight);
-                        
-                        // Enemy "face"
-                        this.ctx.fillStyle = '#fff';
-                        this.ctx.fillRect(screenX - enemyWidth / 4, screenY + enemyHeight / 4, enemyWidth / 8, enemyHeight / 8);
-                        this.ctx.fillRect(screenX + enemyWidth / 8, screenY + enemyHeight / 4, enemyWidth / 8, enemyHeight / 8);
+                        // Menschliche Figur rendern
+                        this.renderHuman(screenX, screenY, enemyWidth, enemyHeight, enemy);
                     }
                 }
             }
             
-            renderMinimap() {
-                const scale = 9;
-                this.minimapCtx.fillStyle = '#000';
-                this.minimapCtx.fillRect(0, 0, 150, 150);
+            renderHuman(x, y, width, height, enemy) {
+                const centerX = x;
+                const headSize = height * 0.2;
+                const bodyHeight = height * 0.5;
+                const legHeight = height * 0.3;
                 
-                // Draw map
-                for (let y = 0; y < 16; y++) {
-                    for (let x = 0; x < 16; x++) {
+                // Team-Farben (CT = Blau, T = Rot/Orange)
+                const teamColors = {
+                    'ct': {uniform: '#1e3a8a', vest: '#374151'},
+                    't': {uniform: '#dc2626', vest: '#451a03'}
+                };
+                
+                const colors = teamColors[enemy.skin] || teamColors['ct'];
+                
+                // Health-based transparency
+                const alpha = Math.max(0.3, enemy.health / enemy.maxHealth);
+                
+                // Kopf (hautfarbe)
+                this.ctx.fillStyle = `rgba(255, 220, 177, ${alpha})`;
+                this.ctx.fillRect(centerX - headSize/2, y, headSize, headSize);
+                
+                // Helm/Mütze
+                this.ctx.fillStyle = `rgba(60, 60, 60, ${alpha})`;
+                this.ctx.fillRect(centerX - headSize/2, y, headSize, headSize * 0.4);
+                
+                // Körper (Uniform)
+                this.ctx.fillStyle = colors.uniform + Math.floor(alpha * 255).toString(16).padStart(2, '0');
+                this.ctx.fillRect(centerX - width/2, y + headSize, width, bodyHeight);
+                
+                // Schutzweste
+                this.ctx.fillStyle = colors.vest + Math.floor(alpha * 255).toString(16).padStart(2, '0');
+                this.ctx.fillRect(centerX - width/3, y + headSize + bodyHeight*0.1, width*0.66, bodyHeight*0.6);
+                
+                // Beine
+                this.ctx.fillStyle = `rgba(30, 30, 30, ${alpha})`; // Dunkle Hose
+                this.ctx.fillRect(centerX - width/3, y + headSize + bodyHeight, width*0.66, legHeight);
+                
+                // Waffe (vereinfacht)
+                this.ctx.fillStyle = `rgba(80, 80, 80, ${alpha})`;
+                this.ctx.fillRect(centerX + width/4, y + headSize + bodyHeight*0.3, width*0.3, 4);
+                
+                // Gesicht (vereinfacht - Augen)
+                this.ctx.fillStyle = `rgba(0, 0, 0, ${alpha})`;
+                this.ctx.fillRect(centerX - headSize*0.3, y + headSize*0.3, 2, 2);
+                this.ctx.fillRect(centerX + headSize*0.1, y + headSize*0.3, 2, 2);
+            }
+            
+            renderMinimap() {
+                const scale = 8.5;
+                this.minimapCtx.fillStyle = '#2a1810'; // Dunkler Wüstenton
+                this.minimapCtx.fillRect(0, 0, 160, 160);
+                
+                // Map rendern
+                for (let y = 0; y < 18; y++) {
+                    for (let x = 0; x < 18; x++) {
                         if (this.map[y][x] === 1) {
-                            this.minimapCtx.fillStyle = '#666';
-                            this.minimapCtx.fillRect(x * scale, y * scale, scale, scale);
+                            this.minimapCtx.fillStyle = '#daa520'; // Sandstein
+                        } else if (this.map[y][x] === 2) {
+                            this.minimapCtx.fillStyle = '#8b4513'; // Dunkle Wände
+                        } else if (this.map[y][x] === 3) {
+                            this.minimapCtx.fillStyle = '#cd853f'; // Säulen
+                        } else {
+                            continue;
                         }
+                        this.minimapCtx.fillRect(x * scale, y * scale, scale-1, scale-1);
                     }
                 }
                 
-                // Draw enemies
-                this.minimapCtx.fillStyle = '#ff0000';
+                // Gegner
                 for (const enemy of this.enemies) {
                     if (enemy.health > 0) {
+                        this.minimapCtx.fillStyle = enemy.skin === 'ct' ? '#0066ff' : '#ff3300';
                         this.minimapCtx.fillRect(enemy.x * scale - 2, enemy.y * scale - 2, 4, 4);
                     }
                 }
                 
-                // Draw player
+                // Spieler
                 this.minimapCtx.fillStyle = '#00ff00';
                 this.minimapCtx.fillRect(this.player.x * scale - 2, this.player.y * scale - 2, 4, 4);
                 
-                // Draw player direction
+                // Blickrichtung
                 this.minimapCtx.strokeStyle = '#00ff00';
+                this.minimapCtx.lineWidth = 2;
                 this.minimapCtx.beginPath();
                 this.minimapCtx.moveTo(this.player.x * scale, this.player.y * scale);
                 this.minimapCtx.lineTo(
-                    this.player.x * scale + Math.cos(this.player.angle) * 10,
-                    this.player.y * scale + Math.sin(this.player.angle) * 10
+                    this.player.x * scale + Math.cos(this.player.angle) * 12,
+                    this.player.y * scale + Math.sin(this.player.angle) * 12
                 );
                 this.minimapCtx.stroke();
             }
@@ -421,13 +506,11 @@
                 
                 this.weapon.lastShot = now;
                 this.weapon.ammo--;
-                this.weapon.recoil = 1; // Recoil effect
+                this.weapon.recoil = 0.8;
                 
-                // Check if we hit an enemy
                 const ray = this.castRay(this.player.angle);
                 
-                for (let i = 0; i < this.enemies.length; i++) {
-                    const enemy = this.enemies[i];
+                for (const enemy of this.enemies) {
                     if (enemy.health <= 0) continue;
                     
                     const dx = enemy.x - this.player.x;
@@ -436,9 +519,8 @@
                     const angleToEnemy = Math.atan2(dy, dx);
                     const angleDiff = Math.abs(angleToEnemy - this.player.angle);
                     
-                    // Check if enemy is in crosshair and closer than wall
-                    if (angleDiff < 0.1 && distance < ray.distance) {
-                        enemy.health -= 34; // 3 shots to kill
+                    if (angleDiff < 0.08 && distance < ray.distance) {
+                        enemy.health -= 35; // Realistischer Schaden
                         if (enemy.health <= 0) {
                             this.kills++;
                         }
@@ -458,9 +540,10 @@
             }
             
             update(deltaTime) {
-                // Movement
-                const moveSpeed = this.player.speed * deltaTime;
+                const currentSpeed = this.player.baseSpeed * this.speedLevels[this.player.speedMultiplier - 1];
+                const moveSpeed = currentSpeed * deltaTime;
                 
+                // Bewegung (deutlich langsamer!)
                 if (this.keys['w']) {
                     const newX = this.player.x + Math.cos(this.player.angle) * moveSpeed;
                     const newY = this.player.y + Math.sin(this.player.angle) * moveSpeed;
@@ -497,10 +580,9 @@
                     }
                 }
                 
-                // Reduce recoil
-                this.weapon.recoil *= 0.9;
+                this.weapon.recoil *= 0.85;
                 
-                // Update enemies (basic AI)
+                // Verbesserte KI
                 for (const enemy of this.enemies) {
                     if (enemy.health <= 0) continue;
                     
@@ -508,10 +590,10 @@
                     const dy = this.player.y - enemy.y;
                     const distance = Math.sqrt(dx * dx + dy * dy);
                     
-                    if (distance < 6 && distance > 0.5) { // Chase player if close
+                    if (distance < 8 && distance > 0.7) {
                         const angle = Math.atan2(dy, dx);
-                        const moveX = Math.cos(angle) * 0.01;
-                        const moveY = Math.sin(angle) * 0.01;
+                        const moveX = Math.cos(angle) * 0.008; // Langsamere Gegner
+                        const moveY = Math.sin(angle) * 0.008;
                         
                         if (this.canMoveTo(enemy.x + moveX, enemy.y + moveY)) {
                             enemy.x += moveX;
@@ -519,21 +601,22 @@
                         }
                     }
                     
-                    // Damage player if too close
-                    if (distance < 0.5) {
-                        this.player.health -= 0.5;
+                    if (distance < 0.7) {
+                        this.player.health -= 0.3;
                         if (this.player.health <= 0) {
-                            alert(`Game Over! Kills: ${this.kills}`);
+                            alert(`☠️ Eliminated! Final Score: ${this.kills} Kills`);
                             location.reload();
                         }
                     }
                 }
+                
+                this.updateUI();
             }
             
             canMoveTo(x, y) {
                 const mapX = Math.floor(x);
                 const mapY = Math.floor(y);
-                return mapX >= 0 && mapX < 16 && mapY >= 0 && mapY < 16 && this.map[mapY][mapX] === 0;
+                return mapX >= 0 && mapX < 18 && mapY >= 0 && mapY < 18 && this.map[mapY][mapX] === 0;
             }
             
             updateUI() {
@@ -541,6 +624,10 @@
                 document.getElementById('kills').textContent = this.kills;
                 document.getElementById('ammo').textContent = this.weapon.ammo;
                 document.getElementById('totalAmmo').textContent = this.weapon.totalAmmo;
+                
+                // Health bar
+                const healthPercent = this.player.health / this.player.maxHealth;
+                document.getElementById('healthBar').style.width = (healthPercent * 100) + '%';
             }
             
             gameLoop(currentTime) {
@@ -555,9 +642,8 @@
             }
         }
         
-        // Start game
         window.addEventListener('load', () => {
-            new FPS3D();
+            new CS2Game();
         });
     </script>
 </body>
